@@ -40,6 +40,18 @@ Same as the observation from the full dataset, 6 AM and 7 AM are still the two h
 
 <img src="visuals/4.png" width="500">
 
+**Combined Weekday and Weekend Median Trip Distance**
+
+<img src="visuals/5.png" width="500">
+
+**Shiny App:**
+
+<img src="visuals/6.png" width="500">
+
+
+
+
+
 
 
 
