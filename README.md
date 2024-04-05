@@ -26,4 +26,13 @@ The graph below, the data is skewed by the distance outliers.
 
 <img src="visuals/2.png" width="500">
 
+**Trip Distance by Time of Day:**
+
+Median Trip Distance by Time of Day for both Weekday and Weekend:
+
+From an initial look at the trip distance by time of day graph, the median trip distance is longer at 6 AM and 7 AM than any other time during the day. The difference between the two hours and the rest of the day is quite significant.
+
+<img src="visuals/3.png" width="500">
+
+
 
