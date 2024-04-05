@@ -1,15 +1,12 @@
 # NewYork-Taxi-Shiny-App-Interactive-maps
 
 1. **Define the Problem**
-
--Visualize trip distance by time of day in any way you see fit, any observations?
-
--What are the most popular pickup locations on weekdays vs weekend?
-
--I want to know where I can most easily get a cab. Recommend a pick up spot where i can find a cab given my lat long.
+ Visualize trip distance by time of day in any way you see fit, any observations?
+ What are the most popular pickup locations on weekdays vs weekend?
+ I want to know where I can most easily get a cab. Recommend a pick up spot where i can find a cab given my lat long.
 
 2. **Data:**
-   The scope of data is limited to Green taxi data for February 2016. There is also data dictionary available from the website, which explain the variable. The Data is available via NYC Trip Data.
+ The scope of data is limited to Green taxi data for February 2016. There is also data dictionary available from the website, which explain the variable. The Data is available via NYC Trip Data.
 
 3. Interactive Maps:
 
