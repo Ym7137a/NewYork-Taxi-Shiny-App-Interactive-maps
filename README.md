@@ -34,5 +34,13 @@ From an initial look at the trip distance by time of day graph, the median trip 
 
 <img src="visuals/3.png" width="500">
 
+Median Trip Distance by Time of Day for Weekday:
+
+Same as the observation from the full dataset, 6 AM and 7 AM are still the two hour that people take taxi for the longest median trip distance. However, in this case, the median trip distance is slightly longer at 6 AM. At that day of the weekday, my assumption is most of the taxi usage is caused by the commute to go to work. Since people usually start work at 8 AM, one of the potential explanation is that people who live further from their work place tend to leave a bit earlier than the people who live close by. Moreover, it might also cause by that more people take taxi to work at 6 AM compared to 7 AM. Therefore, the median trip distance is slightly longer at 6 AM than 7 AM.
+
+<img src="visuals/4.png" width="500">
+
+
+
 
 
