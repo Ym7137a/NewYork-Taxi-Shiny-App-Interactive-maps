@@ -19,3 +19,11 @@
  Interactive Map with Clustering
  
 <img src="visuals/1.png" width="500">
+
+**The Distribution of Distance:**
+
+The graph below, the data is skewed by the distance outliers.
+
+<img src="visuals/2.png" width="500">
+
+
