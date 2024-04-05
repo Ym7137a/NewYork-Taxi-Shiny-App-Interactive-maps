@@ -16,4 +16,6 @@
  hails or calls) in outer boroughs (excluding John F. Kennedy International Airport and LaGuardia Airport unless arranged in advance) and in Manhattan above East 96th and West 110th Streets. That explains the 
  pattern we see here:
 
-<img src="visuals/1.png" alt="Interactive Map with Clustering" width="500">
+ Interactive Map with Clustering
+ 
+<img src="visuals/1.png" width="500">
