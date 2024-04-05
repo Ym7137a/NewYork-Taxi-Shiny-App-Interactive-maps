@@ -1,0 +1,550 @@
+---
+title: "Taxi Interactive Map + Unsupervised Learning"
+author: "Yashvi Malviya"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    theme: lumen
+    number_sections: true
+    font-family: Open Sans, sans-serif
+    font-import: https://fonts.googleapis.com/css?family=Open+Sans
+    code_folding: hide
+    highlight: tango
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Step 1: Define the Problem
+
+1. Download the data, load it into your favorite statistical programing software or database.
+Report the number of rows and columns that you've loaded.
+
+2. Visualize trip distance by time of day in any way you see fit, any observations?
+
+3. What are the most popular pickup locations on weekdays vs weekend?
+
+4. I want to know where I can most easily get a cab. Recommend a pick up spot where i can
+find a cab given my lat long.
+
+
+# Step 2: Gather the Data
+The scope of data is limited to Green taxi data for February 2016. There is also data dictionary available from the website, which explain the variable. The Data is available via [NYC Trip Data](http://www.nyc.gov/html/tlc/html/about/trip_record_data.shtml).
+
+# Step 3: Preprocess the Data
+
+## Dependencies{.tabset .tabset-fade .tabset-pills}
+### Required libraries
+
+```{r results='hide', message=FALSE, warning=FALSE}
+if (!require("pacman")) install.packages("pacman") 
+pacman::p_load(tidyverse, DT, lubridate, leaflet, leaflet.extras, maps, data.table, ggthemes, rebus, clue, skimr, plotly, htmltools)
+```
+
+### Required Dataset & Icon
+
+```{r results='hide', message=FALSE, warning=FALSE}
+# Initially use read.csv then write the file so that going forward I can use fread
+data <- read.csv("../Taxi Shiny app/green_tripdata_2016-02v2.csv", stringsAsFactors = F)
+
+greentaxi <- makeIcon(
+  iconUrl = "https://i.imgur.com/6rw618Q.png",
+  iconWidth = 38, iconHeight = 35,
+  iconAnchorX = 19, iconAnchorY = 39
+)
+
+greentaxi2 <- makeIcon(
+  iconUrl = "https://i.imgur.com/6rw618Q.png",
+  iconWidth = 17, iconHeight = 14,
+  iconAnchorX = 8, iconAnchorY = 18
+)
+ 
+```
+
+## First Glimpse{.tabset .tabset-fade .tabset-pills}
+
+
+The first question can be answered by looking at the structure of the dataset. The dataset has `r nrow(data)` observations(rows) 
+and `r ncol(data)` variables(columns).
+
+
+### First 20 rows with selected columns
+
+```{r  message=FALSE, warning=FALSE}
+data %>% head(100) %>% select(lpep_pickup_datetime,Pickup_longitude,Pickup_latitude,Trip_distance) %>% datatable(filter = 'top', options = list(
+  pageLength = 15, autoWidth = TRUE
+))
+```
+
+### Structure
+
+```{r  message=FALSE, warning=FALSE}
+data %>% glimpse() # 1510722 obs. of  21 variables
+```
+
+### Skim
+
+```{r  message=FALSE, warning=FALSE}
+library(skimr)
+library(knitr)
+
+data %>%
+  skim() %>%
+  kable()
+```
+
+### Summary
+
+```{r  message=FALSE, warning=FALSE}
+data %>% summary()
+```
+
+## Data Cleaning: Correcting, Completing, Creating, and Converting
+### Correcting & Completing
+
+
+Since the trip payment is not in the scale of this analysis, I took out these variables for shorter running time.
+
+
+```{r  message=FALSE, warning=FALSE}
+data[,which(str_detect(names(data),"amount|fee|Extra|fee|Pay|tax|ID|charge"))] <- NULL
+```
+
+
+# Interactive Map
+
+
+Looking at the summary result, I got the map below. It is very interesting to see that all the pick up location are outside of the core area of New York City. By doing a little research, I found out that the green taxi are only allowed to pick up passengers (street hails or calls) in outer boroughs (excluding John F. Kennedy International Airport and LaGuardia Airport unless arranged in advance) and in Manhattan above East 96th and West 110th Streets. That explains the pattern we see here.
+
+
+# Interactive Map with Clustering
+
+
+```{r  message=FALSE, warning=FALSE}
+set.seed(1234567)
+data %>% 
+  sample_n(size=5000) %>% 
+  
+  leaflet() %>% 
+  addProviderTiles(providers$HikeBike.HikeBike, group = "Color map") %>%
+  addProviderTiles(providers$CartoDB.Positron, group = "Light map") %>%
+  addProviderTiles(providers$Stamen.Toner, group = "White map") %>% 
+  addCircleMarkers(~Pickup_longitude, ~Pickup_latitude, radius = 1,
+                   color = "firebrick", fillOpacity = 0.001, group = 'PickUp') %>%
+  addCircleMarkers(~Dropoff_longitude, ~Dropoff_latitude, radius = 1,
+                   color = "steelblue", fillOpacity = 0.001, group = 'DropOff') %>%
+  addMarkers(~Pickup_longitude, ~Pickup_latitude, icon = greentaxi2, 
+                #  radius = 1,color = "firebrick", fillOpacity = 0.001, 
+                   group = 'PickUp',
+                   clusterOptions = markerClusterOptions()) %>%
+  addMarkers(~Dropoff_longitude, ~Dropoff_latitude, # icon = greentaxi2,
+                #  radius = 1, color = "steelblue", fillOpacity = 0.001, 
+                   group = 'DropOff',
+                   clusterOptions = markerClusterOptions()) %>%
+  addScaleBar() %>%
+  addLayersControl(
+    baseGroups = c("Color map", "Light map", "White map"),
+    overlayGroups = c("PickUp", "DropOff"),
+    options = layersControlOptions(collapsed = F)
+  ) %>% 
+  addSearchOSM() %>%
+  addMiniMap()
+```
+
+
+
+
+### Creating, and Converting
+
+
+I converted pick_datetime to time data and created variables such as pickup_hour, pickup_weekday, pickup_weekend, etc. 
+
+
+pickup_hour has value from 1 to 24, denoting 24 hours a day.
+
+
+pickup_weekday has value from Monday to Friday and is categorized as factor.
+
+
+pickup_weekend has value Weekday and Weekend.
+
+
+```{r  message=FALSE, warning=FALSE}
+data <- data %>% mutate(lpep_pickup_datetime = ymd_hms(lpep_pickup_datetime),
+                pickup_hour=hour(lpep_pickup_datetime)+1,
+                pickup_weekday=as.factor(weekdays(lpep_pickup_datetime)),
+                pickup_weekend=if_else(pickup_weekday=='Saturday'|pickup_weekday=='Sunday','Weekend','Weekday'))
+```
+
+# Step 4 Perform Exploratory Data Analysis (EDA)
+
+## The Distribution of Distance{.tabset .tabset-fade .tabset-pills}
+
+### Raw
+
+First of all, let's have an overview on the distance data. As the graph below, the data is skewed by the distance outliers. 
+
+
+```{r results='hide', message=FALSE, warning=FALSE}
+p <- data %>%
+  ggplot(aes(Trip_distance)) +
+  geom_histogram(fill = "firebrick", bins = 150) +
+  theme_economist() +
+  labs(title='Green Taxi Case Study',subtitle='Initial Historgram of Distance',caption="source: NYC Green Taxi Data",
+       x="Travel Distance")
+       
+p
+```
+
+
+### Processed
+
+
+After processing the data, I got an almost normal distribution with some more few distance trips.
+
+
+```{r results='hide', message=FALSE, warning=FALSE}
+data %>%
+  ggplot(aes(Trip_distance)) +
+  geom_histogram(fill = "firebrick", bins = 150) +
+  scale_x_log10() +
+  theme_economist() +
+  labs(title='Green Taxi Case Study',subtitle='Processed Historgram of Distance',caption="source: NYC Green Taxi Data",
+       x="Travel Distance (log)")
+```
+
+
+## Visualize Trip Distance by Time of Day
+
+
+### Median Trip Distance by Time of Day for both Weekday and Weekend
+
+
+From an initial look at the trip distance by time of day graph, the median trip distance is longer at 6 AM and 7 AM than any other time during the day. The difference between the two hours and the rest of the day is quite significant.
+
+
+```{r  message=FALSE, warning=FALSE}
+ggplotly(data %>% group_by(pickup_hour) %>% summarise(avg_trip_distance=median(Trip_distance)) %>% 
+  ggplot(aes(pickup_hour, avg_trip_distance, fill = avg_trip_distance)) + geom_col() +
+  geom_label(aes(label=round(avg_trip_distance,1)), size=3.5, alpha=.7) +
+  # coord_flip() +
+  scale_x_continuous(breaks=seq(1,24,1)) +
+  theme_economist() +
+  theme(legend.position = 'none') +
+  labs(title='Median Trip Distance',subtitle='All Data Included (Weekday and Weekdend)',caption="source: Green Taxi Data",
+       y="Average Trip Distance", x="Time of Day (Pickup)"))
+```
+
+
+### Median Trip Distance by Time of Day for Weekday
+
+
+Same as the observation from the full dataset, 6 AM and 7 AM are still the two hour that people take taxi for the longest median trip distance. However, in this case, the median trip distance is slightly longer at 6 AM. At that day of the weekday, my assumption is most of the taxi usage is caused by the commute to go to work. Since people usually start work at 8 AM, one of the potential explanation is that people who live further from their work place tend to leave a bit earlier than the people who live close by. Moreover, it might also cause by that more people take taxi to work at 6 AM compared to 7 AM. Therefore, the median trip distance is slightly longer at 6 AM than 7 AM.
+
+
+```{r  message=FALSE, warning=FALSE}
+ggplotly(data %>% filter(pickup_weekend=='Weekday') %>% group_by(pickup_hour) %>% summarise(avg_trip_distance=median(Trip_distance)) %>% 
+  ggplot(aes(pickup_hour, avg_trip_distance, fill = avg_trip_distance)) + geom_col() +
+  geom_label(aes(label=round(avg_trip_distance,1)), size=3.5, alpha=.7) +
+  # coord_flip() +
+  scale_x_continuous(breaks=seq(1,24,1)) +
+  theme_economist() +
+  theme(legend.position = 'none') +
+  labs(title='Median Trip Distance',subtitle='Weekday',caption="source: Green Taxi Data",
+       y="Average Trip Distance", x="Time of Day (Pickup)"))
+
+```
+
+
+### Median Trip Distance by Time of Day for Weekend
+
+
+For the weekend, 7 AM and 8 AM turned out to be the two hours that have the longest trip distance. Additionally, the difference between the two hours and the rest of the day is not as significant as for the weekdays. My speculation is that people tend to sleep in, since they don't have to go to work in the early morning. Therefore, the longest median trip distance is postponed one hour as well as the difference is not as significant as the weekdays.
+
+
+```{r  message=FALSE, warning=FALSE}
+ggplotly(data %>% filter(pickup_weekend=='Weekend') %>% group_by(pickup_hour) %>% summarise(avg_trip_distance=median(Trip_distance)) %>% 
+  ggplot(aes(pickup_hour, avg_trip_distance, fill = avg_trip_distance)) + geom_col() +
+  geom_label(aes(label=round(avg_trip_distance,1)), size=3.5, alpha=.7) +
+  # coord_flip() +
+  scale_x_continuous(breaks=seq(1,24,1)) +
+  theme_economist() +
+  theme(legend.position = 'none') +
+  labs(title='Median Trip Distance',subtitle='Weekend',caption="source: Green Taxi Data",
+       y="Average Trip Distance", x="Time of Day (Pickup)"))
+```
+
+
+### Combined Weekday and Weekend Median Trip Distance
+
+
+```{r  message=FALSE, warning=FALSE}
+ggplotly(data %>%
+  group_by(pickup_hour, pickup_weekend) %>%
+  summarise(avg_trip_distance=median(Trip_distance)) %>%
+  ggplot(aes(pickup_hour, avg_trip_distance, color = pickup_weekend)) +
+  geom_smooth(method = "loess", span = 1/2, se=F) +
+  geom_point(size = 4) +
+  labs(x = "Time of Day (Pickup)", y = "Average Trip Distance") +
+  scale_x_continuous(breaks=seq(1,24,1)) +
+  theme_economist() +
+  scale_color_discrete("Weekday vs. Weekend"))
+
+
+```
+
+## Top 5 Pick Up Locations on Weekdays and Weekend
+
+### Basic Set up
+
+
+Rather than directing calculating the top 5 pick up locations, I preprocessed the data a little bit. The logic is that if I directly use the longitude and latitude data, the same pick up spot with slightly different coordinates would be treated as different pick up locations and that would definitely deviate from the actual result. Therefore, I round the longitude and latitude to the 3 decimals from which the coordinates with slightly different number would be treated as one spot. I also used a green cab icon to denote the pick up spots. The graph is interactive and can be zoom in and out. If you place the mouse on the green cab icon, it would show how many pick ups at the location based on the dataset.
+
+
+```{r  message=FALSE, warning=FALSE}
+round_num <- 3
+
+Weekday_Top5 <- data %>% filter(pickup_weekend=='Weekday') %>% 
+  group_by(lng=round(Pickup_longitude,round_num),lat=round(Pickup_latitude,round_num)) %>% 
+  count() %>% arrange(desc(n)) %>% head(5)
+
+
+Weekend_Top5 <- data %>% filter(pickup_weekend=='Weekend') %>% 
+  group_by(lng=round(Pickup_longitude,round_num),lat=round(Pickup_latitude,round_num)) %>% 
+  count() %>% arrange(desc(n)) %>% head(5)
+
+
+```
+
+### Weekday Top 5 Pick up locations
+
+
+There are the top 5 pick up locations during weekdays.
+
+
+1. 71st Ave and Queens Blvd. (13,987 pick ups in Feb 2016)
+
+
+2. E 125th St and Park Ave. (13,235 pick ups in Feb 2016)
+
+
+3. Broad Way and Roosevelt Ave. (12,566 pick ups in Feb 2016)
+
+
+4. Madison Ave and E 101st St. (7,198 pick ups in Feb 2016)
+
+
+5. Bedford Ave and N 7th St. (6,105 pick ups in Feb 2016)
+
+
+```{r  message=FALSE, warning=FALSE}
+Weekday_Top5 %>%
+  leaflet() %>% 
+  addProviderTiles(providers$Esri.NatGeoWorldMap, group = "color map") %>%
+  addProviderTiles(providers$CartoDB.Positron, group = "Light map") %>%
+  addProviderTiles(providers$Stamen.Toner, group = "white map") %>% 
+  addScaleBar() %>%
+  addProviderTiles(providers$Esri.NatGeoWorldMap) %>%
+  addCircleMarkers(~lng, ~lat, radius = 1,
+                   color = "firebrick", fillOpacity = 0.001) %>%
+  addMarkers(~lng, ~lat, icon = greentaxi, label = ~as.character(paste("Number of Pick ups:",Weekday_Top5$n))) %>%
+  addLayersControl(
+    baseGroups = c("Color map", "Light map","white map"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+```
+
+
+### Weekend Top 5 Pick locations
+
+
+1. Broad Way and Roosevelt Ave. (6,465 pick ups in Feb 2016)
+
+
+2. 71st Ave and Queens Blvd. (5,249 pick ups in Feb 2016)
+
+
+3. E 125th St and Park Ave. (4,788 pick ups in Feb 2016)
+
+
+4. Wythe Ave and N 11th St. (4,507 pick ups in Feb 2016)
+
+
+5. Bedford Ave and N 7th St. (2,768 pick ups in Feb 2016)
+
+
+```{r  message=FALSE, warning=FALSE}
+Weekend_Top5 %>%
+  leaflet() %>% 
+  addProviderTiles(providers$Esri.NatGeoWorldMap, group = "color map") %>% 
+  addProviderTiles(providers$CartoDB.Positron, group = "Light map") %>%
+  addProviderTiles(providers$Stamen.Toner, group = "white map") %>% 
+  addScaleBar() %>% 
+  addProviderTiles(providers$Esri.NatGeoWorldMap) %>%
+  addCircleMarkers(~lng, ~lat, radius = 1,
+                   color = "firebrick", fillOpacity = 0.001) %>%
+  addMarkers(~lng, ~lat, icon = greentaxi, label = ~as.character(paste("Number of Pick ups:",Weekend_Top5$n))) %>%
+  addLayersControl(
+    baseGroups = c("Color map", "Light map", "white map"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+```
+
+
+# Step 5 Modelling
+
+
+To recommend a pick up spot, I leverage the power of unsupervised learning by using a simple Kmeans model to group the pick up spots into 50 groups. Each of the pick up locations
+
+
+## Recommend to Find Pick Up Spot
+### Preprocess the data
+
+
+According to the dictionary, there are two types of trip - street-hail and dispatch. For this question, we should only focus on the street-hail and exclude the dispatches. 
+
+
+```{r  message=FALSE, warning=FALSE}
+data_coord <- data %>% filter(Trip_type==1) %>% select(Pickup_longitude, Pickup_latitude)
+data1 <- data %>% filter(Trip_type==1)
+```
+
+I used kmeans model to classify the coordinates into 50 groups.
+
+```{r results='hide', message=FALSE, warning=FALSE}
+set.seed(0)
+data_kmeans <- data_coord %>% kmeans(50,nstart=20)
+
+data1$cluster <- data_kmeans$cluster
+
+pal <- colorNumeric(
+  palette = "Blues",
+  domain = data$cluster)
+```
+
+I sampled 10,000 observations and put them on the map.
+
+
+So far, I answered the first three questions. To answer the last question, I would leverage the power of shiny app and make an interactive graph with the input option for longitude and latitude. Then, I would use the kmeans model to predict which cluster the input location would be in and focus on the pickup points within that cluster. Final, I would pick top 20 pick up points to recommend and the coordinate of the closest pick up spot among the Top 20.
+
+Please found these result from the Shiny app below.
+
+
+```{r  message=FALSE, warning=FALSE}
+set.seed(0)
+data1 %>% sample_n(size=10000) %>% 
+  leaflet() %>% 
+  addProviderTiles(providers$Esri.NatGeoWorldMap, group = "color map") %>%
+  addProviderTiles(providers$CartoDB.Positron, group = "Light map") %>%
+  addProviderTiles(providers$Stamen.Toner, group = "white map") %>% 
+  addScaleBar() %>%
+  addCircleMarkers(~Pickup_longitude, ~Pickup_latitude, radius = 1,
+                   color = ~pal(cluster), fillOpacity = 0.001) %>%
+  addLayersControl(
+    baseGroups = c("Color map", "Light map", "white map"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+```
+
+
+# Shiny App
+
+
+## The final mission to Answer Question 4
+
+I set up the input options for longitude and latitude with sliders. Once that data is input, the program would make a prediction, for which cluster it belongs to, based on the input and kmeans model. Then, it would give 20 recommended pick up spots within the cluster as well as the closest pick up spot among the Top 20.
+
+
+```{r echo=FALSE}
+
+set.seed(0)
+greentaxi2 <- makeIcon(
+  iconUrl = "https://i.imgur.com/6rw618Q.png",
+  iconWidth = 18, iconHeight = 15,
+  iconAnchorX = 9, iconAnchorY = 19
+)
+
+inputPanel(
+  sliderInput("lng", label = "Longtitude:",
+              min = -74.630, max = -73.179, value = -74, step = 0.001),
+  
+  sliderInput("lat", label = "Latitude:",
+              min = 40.5, max = 41, value = 40.75, step = 0.001)
+)
+
+renderLeaflet({
+  x <- data_frame(Pickup_longitude= input$lng, Pickup_latitude= input$lat)
+  cluster_num <- cl_predict(data_kmeans,x)
+
+  result <- data1 %>% filter(cluster==cluster_num)
+
+
+  round_num <- 3
+  top20 <- result %>% group_by(lng=round(Pickup_longitude,round_num),lat=round(Pickup_latitude,round_num)) %>%
+    count() %>% arrange(desc(n)) %>% head(20)
+  top20 %>%
+    leaflet() %>%
+    addProviderTiles(providers$Esri.NatGeoWorldMap) %>%
+    addCircleMarkers(~lng, ~lat, radius = 1,
+                     color = "firebrick", fillOpacity = 0.001)%>%
+    addMarkers(~lng, ~lat, icon = greentaxi2, label = ~as.character(paste("Number of Pick ups:",top20$n)))
+
+})
+
+renderPrint({
+  x <- data_frame(Pickup_longitude= input$lng, Pickup_latitude= input$lat)
+  cluster_num <- cl_predict(data_kmeans,x)
+
+  result <- data1 %>% filter(cluster==cluster_num)
+
+
+  round_num <- 3
+  top20 <- result %>% group_by(lng=round(Pickup_longitude,round_num),lat=round(Pickup_latitude,round_num)) %>%
+    count() %>% arrange(desc(n)) %>% head(20)
+  dist <- list()
+  for (i in 1:20) {
+    dist[i] <- abs(top20[i,1]-x[1])+abs(top20[i,2]-x[2])
+  }
+
+  num <- dist %>% which.min()
+
+  paste("The closest pick up spot is at the coordinate - Longitude:",top20[num,1]," Latitude: ",top20[num,2])
+})
+
+renderLeaflet({
+  x <- data_frame(Pickup_longitude= input$lng, Pickup_latitude= input$lat)
+  cluster_num <- cl_predict(data_kmeans,x)
+
+  result <- data1 %>% filter(cluster==cluster_num)
+
+
+  round_num <- 3
+  top20 <- result %>% group_by(lng=round(Pickup_longitude,round_num),lat=round(Pickup_latitude,round_num)) %>%
+    count() %>% arrange(desc(n)) %>% head(20)
+  dist <- list()
+  for (i in 1:20) {
+    dist[i] <- abs(top20[i,1]-x[1])+abs(top20[i,2]-x[2])
+  }
+
+  num <- dist %>% which.min()
+
+  top20[num,] %>%
+    leaflet() %>%
+    addProviderTiles(providers$Esri.NatGeoWorldMap) %>%
+    addCircleMarkers(~lng, ~lat, radius = 1,
+                     color = "firebrick", fillOpacity = 0.001)%>%
+    addMarkers(~lng, ~lat, icon = greentaxi2, label = ~as.character(paste("Number of Pick ups:",top20$n)))
+})
+
+```
+
+<img src="https://i.imgur.com/q1cnnJb.png">
+
+
+
+
+
+
